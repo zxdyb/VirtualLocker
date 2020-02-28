@@ -1,0 +1,11 @@
+{
+	"db_user" : "tars",
+	"db_pwd" : "tars2015",
+	"db_address" : "172.16.14.247",
+	"db_port" : "3306",
+	"db_instance" : "PCPP_LockVirtual",
+	"sql_file_path" : "./src/PCPP",
+	"concurrent_time_scope" : 15,
+	"log_level" : 1,
+	"upload_timeout" : 10
+}
