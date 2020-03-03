@@ -146,10 +146,15 @@ func (cmd *PmCmdHandler) AddLockCmd(w http.ResponseWriter, r *http.Request) {
     var sn int
     mac := values["mac"][0]
     if len(mac) > 0 {
-        sn, err = cmd.lckImpl.AddLockObj(PM_LOCK, pmbd.SetMac(mac))
-        if err != nil {
-            tlog.Errorf("Add lock obj failed %s", err.Error())
-            return
+        if lckOjbAlready := cmd.lckImpl.GetLockObjByMac(mac); lckOjbAlready != nil {
+            sn = lckOjbAlready.lck.GetLockSn()
+            randMac = lckOjbAlready.lck.GetLockMac()
+        } else {
+            sn, err = cmd.lckImpl.AddLockObj(PM_LOCK, pmbd.SetMac(mac))
+            if err != nil {
+                tlog.Errorf("Add lock obj failed %s", err.Error())
+                return
+            }
         }
     } else {
         randMac = NewRandomMac()

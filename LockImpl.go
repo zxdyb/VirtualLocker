@@ -181,6 +181,19 @@ func (cmd *LockImpl) GetLockObj(sn int, locktype string) *LockObj {
     }
 }
 
+func (cmd *LockImpl) GetLockObjByMac(mac string) *LockObj {
+    cmd.lckObjMutex.RLock()
+    defer cmd.lckObjMutex.RUnlock()
+
+    for _, value := range cmd.lckObjMap {
+        if value.lck.GetLockMac() == mac {
+            return value
+        }
+    }
+
+    return nil
+}
+
 func (cmd *LockImpl) AddLockObj(locktype string, options ...func(interface{})) (int, error) {
     cmd.lckObjMutex.Lock()
     defer cmd.lckObjMutex.Unlock()
@@ -891,7 +904,7 @@ func NewRandomMac() string{
         mac_byte := mrand.Intn(256)
         m[i] = byte(mac_byte)
 
-        mrand.Seed(int64(mac_byte))
+        //mrand.Seed(int64(mac_byte))
     }
     return strings.ToUpper(Mac(m).String())
 }
