@@ -3,6 +3,7 @@ package main
 import (
     . "PCPP/lockermodel"
     "bytes"
+    "container/list"
     "crypto/md5"
     "crypto/rand"
     "encoding/hex"
@@ -30,14 +31,103 @@ const (
     KN_LOCK = "KN"
     PM_LOCK = "PM"
 
+    WORK_SET_NUM_LIMIT = 3000
 )
+
+type Worker struct {
+    done chan int
+    id int
+    keyList *list.List
+    keyMutex sync.RWMutex
+    urlfn func(int) (string, bool)
+    lckfn func(string) *LockObj
+}
+
+func (wk *Worker) ProcessInfinte() {
+    tmdu := time.Second*(time.Duration(1))
+    timer := time.NewTicker(tmdu)
+    tick := timer.C //time.Tick(ticktime)
+    defer func() {
+        timer.Stop()
+    }()
+
+    atomic.AddUint32(&sInfo.TotalSendThread, 1)
+    tlog.Infof("Worker %d process infinite begin and total send thread num is %d", wk.id, sInfo.TotalSendThread)
+
+    for {
+        select {
+        case <-tick:
+            if wk.process() == 0 {
+                tlog.Infof("Worker %d process infinite finished and exit", wk.id)
+                go func() {
+                    wk.done <- wk.id
+                }()
+
+                atomic.AddUint32(&sInfo.TotalSendThread, ^uint32(0))
+                return
+            }
+        }
+    }
+}
+
+func (wk *Worker) process() int {
+    wk.keyMutex.RLock()
+    defer wk.keyMutex.RUnlock()
+
+    tlog.Debugf("%d worker process begin", wk.id)
+
+    var next *list.Element
+    for value := wk.keyList.Front(); value != nil; value = next {
+        next = value.Next()
+
+        lckObj := wk.lckfn(value.Value.(string))
+        if lckObj == nil {
+            tlog.Errorf("Not found lock obj %s", value.Value.(string))
+            wk.keyList.Remove(value)
+            continue
+        }
+
+        lckObj.currentInterval++
+        if lckObj.currentInterval <= lckObj.timerInterval {
+            tlog.Debugf("%d %s lock obj current interval is %d", wk.id, value.Value.(string), lckObj.currentInterval)
+            continue
+        }
+
+        lckObj.currentInterval = 0
+
+        url, ok := wk.urlfn(lckObj.lck.GetLockType())
+        if !ok {
+            tlog.Debugf("Empty url that lock use to upload %d", lckObj.lck.GetLockSn())
+            continue
+        }
+
+        //go func(lckObj *LockObj, url string) {
+            lckObj.rwmutex.RLock()
+            err := lckObj.lck.UpReport(url)
+            if err != nil {
+                atomic.AddUint32(&lckObj.uploadFailedNums, 1)
+                atomic.AddUint64(&sInfo.FailedNumsOfUpload, 1)
+                tlog.Errorf("Upload load error is %s", err.Error())
+            } else {
+                atomic.AddUint32(&lckObj.uploadSuccessNums, 1)
+                atomic.AddUint64(&sInfo.SuccessNumsOfUpload, 1)
+                tlog.Debugf("Upload load success.")
+            }
+            lckObj.rwmutex.RUnlock()
+        //}(lckObj, url)
+
+    }
+
+    return wk.keyList.Len()
+}
 
 type SummaryInfo struct {
     TotalNumsOfUpload uint64   `json:"total_nums_of_upload"`
     SuccessNumsOfUpload uint64 `json:"success_nums_of_upload"`
     FailedNumsOfUpload uint64  `json:"failed_nums_of_upload"`
-    RatioOfUpload float32          `json:"ratio_of_upload"`
+    RatioOfUpload float32      `json:"ratio_of_upload"`
     TotalLockNums int          `json:"total_lock_nums"`
+    TotalSendThread uint32     `json:"total_send_thread"`
 }
 
 var sInfo SummaryInfo
@@ -49,6 +139,9 @@ type LockObj struct {
 
     uploadSuccessNums uint32
     uploadFailedNums uint32
+
+    timerInterval int
+    currentInterval int
 }
 
 type LockImpl struct {
@@ -58,6 +151,11 @@ type LockImpl struct {
     lckObjMutex   sync.RWMutex
     lckObjMap map[string]*LockObj
     done      chan struct{}
+
+    workListMutx sync.RWMutex
+    workList *list.List
+    workIdBase int
+    workDone chan int
 }
 
 func (cmd *LockImpl) GetUploadUrl(devType int) (string, bool) {
@@ -101,18 +199,56 @@ func (cmd *LockImpl) AddLockObj(locktype string, options ...func(interface{})) (
         return -1, err
     }
 
-    go cmd.createUploadThread(lockobj, cmd.done, lockobj.done)
+    lockobj.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScope)
+
+    //go cmd.createUploadThread(lockobj, cmd.done, lockobj.done)
+
+    go cmd.createWorkLoad(key)
 
     return sn, nil
+}
+
+func (cmd *LockImpl) createWorkLoad(key string) {
+    tlog.Debugf("Create work load key is %s", key)
+
+    cmd.workListMutx.Lock()
+    defer cmd.workListMutx.Unlock()
+
+    tlog.Debugf("Create work load get mutex and key is %s", key)
+
+    var newFlag bool = true
+    for e := cmd.workList.Front(); e != nil; e = e.Next() {
+        e.Value.(*Worker).keyMutex.Lock()
+        defer e.Value.(*Worker).keyMutex.Unlock()
+
+        tlog.Debugf("Begin check worker %d", e.Value.(*Worker).id)
+
+        if e.Value.(*Worker).keyList.Len() < cfgInfo.WorkSetLimit {
+            tlog.Debugf("Use already exist worker %d", e.Value.(*Worker).id)
+
+            e.Value.(*Worker).keyList.PushBack(key)
+            newFlag = false
+            break
+        }
+    }
+
+    if newFlag {
+        cmd.workIdBase++
+        tlog.Infof("%s lock obj use new worker %d", key, cmd.workIdBase)
+        wk := cmd.NewWorker(cmd.workIdBase)
+        wk.keyList.PushBack(key)
+        cmd.workList.PushFront(wk)
+        go wk.ProcessInfinte()
+    }
 }
 
 func (cmd *LockImpl) DelLockObj(sn int, locktype string) error {
     cmd.lckObjMutex.Lock()
     defer cmd.lckObjMutex.Unlock()
-    var obj *LockObj
+    //var obj *LockObj
     var ok bool
     key := locktype + strconv.Itoa(sn)
-    if obj, ok = cmd.lckObjMap[key]; !ok {
+    if _, ok = cmd.lckObjMap[key]; !ok {
         return fmt.Errorf("Already not exist lock %d", sn)
     }
 
@@ -124,9 +260,10 @@ func (cmd *LockImpl) DelLockObj(sn int, locktype string) error {
 
     delete(cmd.lckObjMap, key)
 
-    go func(obj *LockObj) {
-        obj.done <- struct{}{}
-    }(obj)
+    ////
+    //go func(obj *LockObj) {
+    //    obj.done <- struct{}{}
+    //}(obj)
 
     return nil
 }
@@ -293,6 +430,9 @@ func (cmd *LockImpl) LoadAllLockFromDB() error {
 }
 
 func (cmd *LockImpl) Init(locknum int, pmlocknum int) error {
+    cmd.workList = list.New()
+    cmd.workDone = make(chan int)
+
     cmd.uploadUrlInfo = make(map[int]string)
 
     cmd.done = make(chan struct{})
@@ -367,13 +507,93 @@ func (cmd *LockImpl) createUploadThread(lck *LockObj, done chan struct{}, objDon
     }
 }
 
+func (cmd *LockImpl) NewWorker(id int) *Worker {
+    //cmd.workIdBase++
+
+    return &Worker{
+        done: cmd.workDone,
+        id: id, //cmd.workIdBase,
+        keyList:  list.New(),
+        keyMutex: sync.RWMutex{},
+        urlfn:    cmd.GetUploadUrl,
+        lckfn: func(key string) *LockObj {
+            cmd.lckObjMutex.RLock()
+            defer cmd.lckObjMutex.RUnlock()
+            if obj, ok := cmd.lckObjMap[key]; ok {
+                return obj
+            } else {
+                return nil
+            }
+        },
+    }
+}
+
 func (cmd *LockImpl) UploadReport() {
     cmd.lckObjMutex.RLock()
     defer cmd.lckObjMutex.RUnlock()
-    for _, value := range cmd.lckObjMap {
+
+    var newFlag bool = true
+    var count int
+    for key, value := range cmd.lckObjMap {
         //time.Sleep(time.Millisecond*20)
-        go cmd.createUploadThread(value, cmd.done, value.done)
+        //go cmd.createUploadThread(value, cmd.done, value.done)
+
+        value.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScope)
+
+        var wk *Worker
+        count++
+        if newFlag || count > cfgInfo.WorkSetLimit {
+            if newFlag {
+                newFlag = false
+            }
+            if count > cfgInfo.WorkSetLimit {
+                count = 0
+            }
+
+            cmd.workIdBase++
+            wk = cmd.NewWorker(cmd.workIdBase)
+
+            cmd.workList.PushFront(wk)
+        } else {
+            wk = cmd.workList.Front().Value.(*Worker)
+
+        }
+
+        wk.keyList.PushBack(key)
     }
+
+    for e := cmd.workList.Front(); e != nil; e = e.Next() {
+        //fmt.Printf("%v ", e.Value)
+
+        go e.Value.(*Worker).ProcessInfinte()
+
+    }
+
+    go func() {
+        for {
+            select {
+            case id := <- cmd.workDone:
+                tlog.Infof("Begin worker check")
+                cmd.workListMutx.Lock()
+
+                var next *list.Element
+                for value := cmd.workList.Front(); value != nil; value = next {
+                    //fmt.Printf("%v ", e.Value)
+                    next = value.Next()
+
+                    if value.Value.(*Worker).id == id {
+                        cmd.workList.Remove(value)
+                        tlog.Infof("Work %d exit", id)
+                        break
+                    }
+                }
+                cmd.workListMutx.Unlock()
+
+                tlog.Infof("Finish worker check")
+            }
+        }
+    }()
+
 }
 
 func (cmd *LockImpl) GetLockInfo(sn int, locktype string) (string, error) {
@@ -525,6 +745,7 @@ func (cmd *LockImpl) GetSummaryInfo() string {
     defer cmd.lckObjMutex.RUnlock()
 
     summaryInfo := &SummaryInfo{}
+    summaryInfo.TotalSendThread = atomic.LoadUint32(&sInfo.TotalSendThread)
     summaryInfo.TotalLockNums = len(cmd.lckObjMap)
 
     ////

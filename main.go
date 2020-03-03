@@ -23,6 +23,7 @@ type ConfigInfo struct {
     ConcurrentTimeScope int `json:"concurrent_time_scope"`
     LogLevel        int    `json:"log_level"`
     UploadTimeout   int    `json:"upload_timeout"`
+    WorkSetLimit    int    `json:"work_set_limit"`
 }
 
 func (cfgInfo *ConfigInfo) GetConfigFromJsonFile(filename string) {
@@ -35,6 +36,7 @@ func (cfgInfo *ConfigInfo) GetConfigFromJsonFile(filename string) {
     cfgInfo.ConcurrentTimeScope = 30
     cfgInfo.LogLevel = 0
     cfgInfo.UploadTimeout = 5
+    cfgInfo.WorkSetLimit = WORK_SET_NUM_LIMIT
 
     cfgFile, err := os.Open(filename)
     if err != nil {
