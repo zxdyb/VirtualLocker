@@ -9,6 +9,7 @@ import (
     "log"
     "net/http"
     "os"
+    "strconv"
     "time"
 )
 
@@ -24,6 +25,7 @@ type ConfigInfo struct {
     LogLevel        int    `json:"log_level"`
     UploadTimeout   int    `json:"upload_timeout"`
     WorkSetLimit    int    `json:"work_set_limit"`
+    ListenPort      int    `json:"listen_port"`
 }
 
 func (cfgInfo *ConfigInfo) GetConfigFromJsonFile(filename string) {
@@ -37,6 +39,7 @@ func (cfgInfo *ConfigInfo) GetConfigFromJsonFile(filename string) {
     cfgInfo.LogLevel = 0
     cfgInfo.UploadTimeout = 5
     cfgInfo.WorkSetLimit = WORK_SET_NUM_LIMIT
+    cfgInfo.ListenPort = 9210
 
     cfgFile, err := os.Open(filename)
     if err != nil {
@@ -86,6 +89,7 @@ func main() {
     dbport := cfgInfo.DbPort //"3306"
     dbinstance := cfgInfo.DbInstance //"PCPP_LockVirtual"
     sqlfilepath := cfgInfo.SqlFilePath //"./src/PCPP" // "/home/sql/locker"
+    listenAddress := "0.0.0.0:" + strconv.Itoa(cfgInfo.ListenPort)
 
     tlog.SetLoggerLevel(cfgInfo.LogLevel)
 
@@ -145,7 +149,7 @@ func main() {
     mux.HandleFunc("/getSummaryInfo", lck.GetSummaryInfoCmd)
 
     server := &http.Server{
-        Addr:         "0.0.0.0:9210",
+        Addr:         listenAddress, //"0.0.0.0:9210",
         WriteTimeout: time.Second * 3,            //设置3秒的写超时
         ReadTimeout:  time.Second * 3,
         Handler:      mux,
