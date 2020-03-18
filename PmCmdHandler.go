@@ -596,7 +596,7 @@ func (cmd *PmCmdHandler) RegUploadUrlCmd(w http.ResponseWriter, r *http.Request)
 }
 
 func (cmd *PmCmdHandler) SetStInfoCmd(w http.ResponseWriter, r *http.Request) {
-    tlog.Debugf("Register upload url is %s", r.RequestURI)
+    tlog.Debugf("SetStInfoCmd url is %s", r.RequestURI)
     var err error
     defer func() {
         if err != nil {
@@ -610,7 +610,7 @@ func (cmd *PmCmdHandler) SetStInfoCmd(w http.ResponseWriter, r *http.Request) {
 
             resultstr, err := json.Marshal(rsp)
             if err != nil {
-                tlog.Errorf("Register upload url failed %s", err.Error())
+                tlog.Errorf("SetStInfoCmd url failed %s", err.Error())
                 return
             }
 

@@ -3,6 +3,7 @@ package main
 import (
     "encoding/json"
     "strconv"
+    "time"
 )
 
 const (
@@ -273,6 +274,8 @@ func (pml *PMLock) UpReport(URL string) error {
         st = pml.StatusLock
         tlog.Debugf("Upload info is lock status and value is %s", st)
     }
+
+    pml.StatusTime = strconv.Itoa(int(time.Now().Unix())) //更新时间戳
 
     url := URL + "/pmlocker"
     params := make(map[string]string)

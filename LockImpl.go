@@ -643,6 +643,9 @@ func (cmd *LockImpl) SetLockInfo(sn int, locktype string, options ...func(interf
         return err
     }
 
+    //启动直接上报
+    go cmd.DirectUpReport(lckobj)
+
     return nil
 }
 
@@ -668,6 +671,9 @@ func (cmd *LockImpl) LockCmdAction(sn int, action int, locktype string) error {
         return err
     }
 
+    //启动直接上报
+    go cmd.DirectUpReport(lckobj)
+
     return nil
 }
 
@@ -692,6 +698,10 @@ func (cmd *LockImpl) MagCmdAction(sn int, action int, locktype string) error {
         return err
     }
 
+    //启动直接上报
+    go cmd.DirectUpReport(lckobj)
+
+
     return nil
 }
 
@@ -713,6 +723,9 @@ func (cmd *LockImpl) SetStInfo(sn int, locktype string, options ...func(interfac
         tlog.Errorf("Save lock failed %s", err.Error())
         return err
     }
+
+    //启动直接上报
+    go cmd.DirectUpReport(lckobj)
 
     return nil
 }
@@ -791,6 +804,39 @@ func (cmd *LockImpl) GetSummaryInfo() string {
     }
 
     return string(resultstr)
+}
+
+func (cmd *LockImpl) DirectUpReport(lckObj *LockObj) {
+    url, ok := cmd.GetUploadUrl(lckObj.lck.GetLockType())
+    if !ok {
+        tlog.Debugf("Empty url that lock use to upload %d", lckObj.lck.GetLockSn())
+        return
+    }
+
+    tlog.Debugf("Begin direct upload lock status to %s and sn is %d", url, lckObj.lck.GetLockSn())
+
+    lckObj.rwmutex.Lock() //这里为了与周期性上报互斥，所以使用了写锁，防止并发
+
+    var loopBase int = 1
+    if PM_LOCK_TYPE == lckObj.lck.GetLockType() {
+        loopBase = 2
+    }
+    for i := 0; i < loopBase ; i++ {
+        tlog.Debugf("Begin loop %d", i)
+
+        err := lckObj.lck.UpReport(url)
+        if err != nil {
+            atomic.AddUint32(&lckObj.uploadFailedNums, 1)
+            atomic.AddUint64(&sInfo.FailedNumsOfUpload, 1)
+            tlog.Errorf("Upload direct load error is %s", err.Error())
+        } else {
+            atomic.AddUint32(&lckObj.uploadSuccessNums, 1)
+            atomic.AddUint64(&sInfo.SuccessNumsOfUpload, 1)
+            tlog.Debugf("Upload direct load success and sn is %d", lckObj.lck.GetLockSn())
+        }
+    }
+
+    lckObj.rwmutex.Unlock()
 }
 
 
