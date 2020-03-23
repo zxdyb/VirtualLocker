@@ -89,7 +89,8 @@ func (wk *Worker) process() int {
 
         lckObj.currentInterval++
         if lckObj.currentInterval <= lckObj.timerInterval {
-            tlog.Debugf("%d %s lock obj current interval is %d", wk.id, value.Value.(string), lckObj.currentInterval)
+            tlog.Debugf("%d %s lock obj current interval is %d, time interval is %d",
+                wk.id, value.Value.(string), lckObj.currentInterval, lckObj.timerInterval)
             continue
         }
 
@@ -103,6 +104,11 @@ func (wk *Worker) process() int {
 
         //go func(lckObj *LockObj, url string) {
             lckObj.rwmutex.RLock()
+            if lckObj.uploadFlag {
+                lckObj.uploadFlag = false
+                tlog.Debugf("%s lock obj no need upload", value.Value.(string))
+                continue
+            }
             err := lckObj.lck.UpReport(url)
             if err != nil {
                 atomic.AddUint32(&lckObj.uploadFailedNums, 1)
@@ -133,8 +139,9 @@ type SummaryInfo struct {
 var sInfo SummaryInfo
 
 type LockObj struct {
-    done chan struct{}
-    lck LockStatus
+    done       chan struct{}
+    uploadFlag bool
+    lck        LockStatus
     rwmutex sync.RWMutex
 
     uploadSuccessNums uint32
@@ -212,7 +219,7 @@ func (cmd *LockImpl) AddLockObj(locktype string, options ...func(interface{})) (
         return -1, err
     }
 
-    lockobj.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScope)
+    lockobj.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScopeUp, cfgInfo.ConcurrentTimeScopeLow, 1)
 
     //go cmd.createUploadThread(lockobj, cmd.done, lockobj.done)
 
@@ -475,7 +482,7 @@ func (cmd *LockImpl) Init(locknum int, pmlocknum int) error {
 }
 
 func (cmd *LockImpl) createUploadThread(lck *LockObj, done chan struct{}, objDone chan struct{}) {
-    tmvalue := GetRandInt(cfgInfo.ConcurrentTimeScope)
+    tmvalue := GetRandInt(cfgInfo.ConcurrentTimeScopeUp, cfgInfo.ConcurrentTimeScopeLow, 2)
     tmdu := time.Second*(time.Duration(tmvalue))
 
     tlog.Debugf("%d Lock timeout %s", lck.lck.GetLockSn(), tmdu.String())
@@ -545,13 +552,16 @@ func (cmd *LockImpl) UploadReport() {
     cmd.lckObjMutex.RLock()
     defer cmd.lckObjMutex.RUnlock()
 
+    var inc int
     var newFlag bool = true
     var count int
     for key, value := range cmd.lckObjMap {
         //time.Sleep(time.Millisecond*20)
         //go cmd.createUploadThread(value, cmd.done, value.done)
 
-        value.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScope)
+        inc++
+        inc *= 3
+        value.timerInterval = GetRandInt(cfgInfo.ConcurrentTimeScopeUp, cfgInfo.ConcurrentTimeScopeLow, inc)
 
         var wk *Worker
         count++
@@ -644,7 +654,7 @@ func (cmd *LockImpl) SetLockInfo(sn int, locktype string, options ...func(interf
     }
 
     //启动直接上报
-    go cmd.DirectUpReport(lckobj)
+    go cmd.DirectUpReportLazy(lckobj)
 
     return nil
 }
@@ -672,7 +682,7 @@ func (cmd *LockImpl) LockCmdAction(sn int, action int, locktype string) error {
     }
 
     //启动直接上报
-    go cmd.DirectUpReport(lckobj)
+    go cmd.DirectUpReportLazy(lckobj)
 
     return nil
 }
@@ -699,7 +709,7 @@ func (cmd *LockImpl) MagCmdAction(sn int, action int, locktype string) error {
     }
 
     //启动直接上报
-    go cmd.DirectUpReport(lckobj)
+    go cmd.DirectUpReportLazy(lckobj)
 
 
     return nil
@@ -725,7 +735,7 @@ func (cmd *LockImpl) SetStInfo(sn int, locktype string, options ...func(interfac
     }
 
     //启动直接上报
-    go cmd.DirectUpReport(lckobj)
+    go cmd.DirectUpReportLazy(lckobj)
 
     return nil
 }
@@ -806,6 +816,13 @@ func (cmd *LockImpl) GetSummaryInfo() string {
     return string(resultstr)
 }
 
+func (cmd *LockImpl) DirectUpReportLazy(lckObj *LockObj) {
+    select {
+    case <- time.After(time.Second*(time.Duration(1))):
+        cmd.DirectUpReport(lckObj)
+    }
+}
+
 func (cmd *LockImpl) DirectUpReport(lckObj *LockObj) {
     url, ok := cmd.GetUploadUrl(lckObj.lck.GetLockType())
     if !ok {
@@ -816,6 +833,8 @@ func (cmd *LockImpl) DirectUpReport(lckObj *LockObj) {
     tlog.Debugf("Begin direct upload lock status to %s and sn is %d", url, lckObj.lck.GetLockSn())
 
     lckObj.rwmutex.Lock() //这里为了与周期性上报互斥，所以使用了写锁，防止并发
+
+    lckObj.uploadFlag = true
 
     var loopBase int = 1
     if PM_LOCK_TYPE == lckObj.lck.GetLockType() {
@@ -863,9 +882,15 @@ func GetGuid() string {
     return GetMd5String2(b) //GetMd5String(base64.URLEncoding.EncodeToString(b))
 }
 
-func GetRandInt(uplimit int) int {
-    mrand.Seed(time.Now().UnixNano())
-    return mrand.Intn(uplimit) + 1
+func GetRandInt(uplimit int, lowlimit int, inc int) int {
+    mrand.Seed(time.Now().UnixNano() + int64(inc))
+
+    result := mrand.Intn(uplimit)
+    if result < lowlimit {
+        result += lowlimit
+    }
+
+    return result
 }
 
 func HttpPostJson(jsonStr, urlStr string) (string, error) {

@@ -5,7 +5,10 @@
 	"db_port" : "3306",
 	"db_instance" : "PCPP_LockVirtual",
 	"sql_file_path" : "./src/PCPP",
-	"concurrent_time_scope" : 15,
-	"log_level" : 1,
-	"upload_timeout" : 10
+	"concurrent_time_scope_up" : 25,
+    "concurrent_time_scope_low" : 5,
+	"log_level" : 0,
+	"upload_timeout" : 10,
+	"work_set_limit" : 2000,
+    "listen_port" : 8788
 }

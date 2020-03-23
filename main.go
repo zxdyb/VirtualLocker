@@ -21,7 +21,8 @@ type ConfigInfo struct {
     DbInstance      string `json:"db_instance"`
     SqlFilePath     string `json:"sql_file_path"`
 
-    ConcurrentTimeScope int `json:"concurrent_time_scope"`
+    ConcurrentTimeScopeUp int `json:"concurrent_time_scope_up"`
+    ConcurrentTimeScopeLow int `json:"concurrent_time_scope_low"`
     LogLevel        int    `json:"log_level"`
     UploadTimeout   int    `json:"upload_timeout"`
     WorkSetLimit    int    `json:"work_set_limit"`
@@ -35,7 +36,8 @@ func (cfgInfo *ConfigInfo) GetConfigFromJsonFile(filename string) {
     cfgInfo.DbPort = "3306"
     cfgInfo.DbInstance = "PCPP_LockVirtual"
     cfgInfo.SqlFilePath = "./src/PCPP"
-    cfgInfo.ConcurrentTimeScope = 30
+    cfgInfo.ConcurrentTimeScopeUp = 30
+    cfgInfo.ConcurrentTimeScopeLow = 5
     cfgInfo.LogLevel = 0
     cfgInfo.UploadTimeout = 5
     cfgInfo.WorkSetLimit = WORK_SET_NUM_LIMIT
