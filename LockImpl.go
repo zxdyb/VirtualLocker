@@ -107,6 +107,7 @@ func (wk *Worker) process() int {
             if lckObj.uploadFlag {
                 lckObj.uploadFlag = false
                 tlog.Debugf("%s lock obj no need upload", value.Value.(string))
+                lckObj.rwmutex.RUnlock()
                 continue
             }
             err := lckObj.lck.UpReport(url)
