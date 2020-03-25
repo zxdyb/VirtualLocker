@@ -103,13 +103,19 @@ func (wk *Worker) process() int {
         }
 
         //go func(lckObj *LockObj, url string) {
+
+
             lckObj.rwmutex.RLock()
             if lckObj.uploadFlag {
                 lckObj.uploadFlag = false
                 tlog.Debugf("%s lock obj no need upload", value.Value.(string))
                 lckObj.rwmutex.RUnlock()
+
                 continue
             }
+
+            lckObj.uploadLoopFlag = true
+
             err := lckObj.lck.UpReport(url)
             if err != nil {
                 atomic.AddUint32(&lckObj.uploadFailedNums, 1)
@@ -121,6 +127,7 @@ func (wk *Worker) process() int {
                 tlog.Debugf("Upload load success.")
             }
             lckObj.rwmutex.RUnlock()
+
         //}(lckObj, url)
 
     }
@@ -142,6 +149,7 @@ var sInfo SummaryInfo
 type LockObj struct {
     done       chan struct{}
     uploadFlag bool
+    uploadLoopFlag bool
     lck        LockStatus
     rwmutex sync.RWMutex
 
@@ -150,6 +158,21 @@ type LockObj struct {
 
     timerInterval int
     currentInterval int
+}
+func (lckObj *LockObj) Clone() *LockObj {
+    newInstance := &LockObj{
+        done:              nil,
+        uploadFlag:        lckObj.uploadFlag,
+        uploadLoopFlag:    lckObj.uploadLoopFlag,
+        lck:               lckObj.lck.Clone(),
+        rwmutex:           sync.RWMutex{},
+        uploadSuccessNums: lckObj.uploadSuccessNums,
+        uploadFailedNums:  lckObj.uploadFailedNums,
+        timerInterval:     lckObj.timerInterval,
+        currentInterval:   lckObj.currentInterval,
+    }
+
+    return newInstance
 }
 
 type LockImpl struct {
@@ -833,30 +856,47 @@ func (cmd *LockImpl) DirectUpReport(lckObj *LockObj) {
 
     tlog.Debugf("Begin direct upload lock status to %s and sn is %d", url, lckObj.lck.GetLockSn())
 
-    lckObj.rwmutex.Lock() //这里为了与周期性上报互斥，所以使用了写锁，防止并发
-
+    lckObj.rwmutex.Lock()
     lckObj.uploadFlag = true
+    newLckObj := lckObj.Clone()
+
+    lckObj.rwmutex.Unlock()
+
+
+    //表示刚刚周期性上报已经上报过了，所以需要延时1秒再次上报
+    if newLckObj.uploadLoopFlag {
+        newLckObj.uploadLoopFlag = false
+        time.Sleep(time.Second)
+        tlog.Debugf("Because loop upload has already done so sleep 1s %d", newLckObj.lck.GetLockSn())
+    }
+
+    //lckObj.uploadFlag = true
 
     var loopBase int = 1
-    if PM_LOCK_TYPE == lckObj.lck.GetLockType() {
+    if PM_LOCK_TYPE == newLckObj.lck.GetLockType() {
         loopBase = 2
     }
     for i := 0; i < loopBase ; i++ {
         tlog.Debugf("Begin loop %d", i)
 
-        err := lckObj.lck.UpReport(url)
+        err := newLckObj.lck.UpReport(url)
         if err != nil {
-            atomic.AddUint32(&lckObj.uploadFailedNums, 1)
+            atomic.AddUint32(&newLckObj.uploadFailedNums, 1)
             atomic.AddUint64(&sInfo.FailedNumsOfUpload, 1)
             tlog.Errorf("Upload direct load error is %s", err.Error())
         } else {
-            atomic.AddUint32(&lckObj.uploadSuccessNums, 1)
+            atomic.AddUint32(&newLckObj.uploadSuccessNums, 1)
             atomic.AddUint64(&sInfo.SuccessNumsOfUpload, 1)
-            tlog.Debugf("Upload direct load success and sn is %d", lckObj.lck.GetLockSn())
+            tlog.Debugf("Upload direct load success and sn is %d", newLckObj.lck.GetLockSn())
+        }
+
+        if (i + 1) < loopBase {
+            time.Sleep(time.Second)
+            tlog.Debugf("Loop sleep done %d", i)
         }
     }
 
-    lckObj.rwmutex.Unlock()
+    //lckObj.rwmutex.Unlock()
 }
 
 

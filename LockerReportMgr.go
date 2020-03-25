@@ -21,6 +21,7 @@ type LockStatus interface {
     UpReport(URL string) error
     LockCmdAction(action int) error
     MagCmdAction(action int) error
+    Clone() LockStatus
 }
 
 type optionFunc func(interface{})
@@ -69,6 +70,24 @@ func (kblk *KnBoardLock) UpReport(URL string) error {
     }
     tlog.Debugf("Upload result success %s", ret)
     return nil
+}
+
+func (kblk *KnBoardLock) Clone() LockStatus {
+
+    newInstance := &KnBoardLock{
+        Sn:                     kblk.Sn,
+        Error:                  kblk.Error,
+        Coil_frequency:         kblk.Coil_frequency,
+        Position_sensor_status: kblk.Position_sensor_status,
+        Locker_operating:       kblk.Locker_operating,
+        Car_sensor:             kblk.Car_sensor,
+        Action_counter:         kblk.Action_counter,
+        Updated_at:             kblk.Updated_at,
+        Sign:                   kblk.Sign,
+        Device_type:            kblk.Device_type,
+    }
+
+    return newInstance
 }
 
 func (kblk *KnBoardLock) GetLockType() int {
@@ -293,6 +312,28 @@ func (pml *PMLock) UpReport(URL string) error {
 
     tlog.Debugf("Pm Upload result: %s and upload info is %+v", ret, params)
     return nil
+}
+
+func (pml *PMLock) Clone() LockStatus {
+    newInstance := &PMLock{
+        Vmlock:             pml.Vmlock,
+        Status:             pml.Status,
+        LockStateTime:      pml.LockStateTime,
+        DetectorStatus:     pml.DetectorStatus,
+        DetectorStatusTime: pml.DetectorStatusTime,
+        LastTime:           pml.LastTime,
+        DetectionAuto:      pml.DetectionAuto,
+        ComStatus:          pml.ComStatus,
+        Electricity:        pml.Electricity,
+        Mac:                pml.Mac,
+        StatusType:         pml.StatusType,
+        StatusTime:         pml.StatusTime,
+        StatusLock:         pml.StatusLock,
+        StatusMag:          pml.StatusMag,
+        StatusMagFlag:      pml.StatusMagFlag,
+    }
+
+    return newInstance
 }
 
 func (pml *PMLock)  GetStInfo() string {
