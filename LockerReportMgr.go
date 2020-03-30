@@ -18,7 +18,7 @@ type LockStatus interface {
     GetLockType() int
     GetLockSn() int
     GetLockMac() string
-    UpReport(URL string) error
+    UpReport(URL string, flag string) error
     LockCmdAction(action int) error
     MagCmdAction(action int) error
     Clone() LockStatus
@@ -59,7 +59,7 @@ func (kblk *KnBoardLock)MagCmdAction(action int) error {
     return nil
 }
 
-func (kblk *KnBoardLock) UpReport(URL string) error {
+func (kblk *KnBoardLock) UpReport(URL string, flag string) error {
     value := kblk.GetStInfo()
 
     tlog.Debugf("Upload content: %s %s", value, URL)
@@ -282,7 +282,7 @@ func (pml *PMLock) MagCmdAction(action int) error {
 }
 
 ///pmlocker?blue_mac=E5:EB:4F:BC:8C:2B&vmlock=190927827134&status_type=1&status=1&status_time=1570759562
-func (pml *PMLock) UpReport(URL string) error {
+func (pml *PMLock) UpReport(URL string, flag string) error {
     var st string
     if pml.StatusType == PM_LOCKSTATUS_TYPE && pml.StatusMagFlag == PM_MAG_ENABLE {
         pml.StatusType = PM_MAGSTATUS_TYPE
