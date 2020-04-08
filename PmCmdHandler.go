@@ -186,7 +186,7 @@ func (cmd *PmCmdHandler) AddLockCmd(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Add lock success and rsp body is %s", body)
+    tlog.Debugf("Add lock success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 func (cmd *PmCmdHandler) DelLockCmd(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +255,7 @@ func (cmd *PmCmdHandler) DelLockCmd(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Del lock success and rsp body is %s", body)
+    tlog.Debugf("Del lock success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 func (cmd PmCmdHandler) ActionCmdDispatch(w http.ResponseWriter, r *http.Request) {
@@ -372,7 +372,7 @@ func (cmd *PmCmdHandler) ActionLockCmd(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Lock action cmd success and rsp body is %s", body)
+    tlog.Debugf("Lock action cmd success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 
@@ -449,7 +449,7 @@ func (cmd *PmCmdHandler) SwitchMagLockCmd(w http.ResponseWriter, r *http.Request
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Switch mag lock cmd success and rsp body is %s", body)
+    tlog.Debugf("Switch mag lock cmd success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 func (cmd *PmCmdHandler) GetLockCmd(w http.ResponseWriter, r *http.Request) {
@@ -531,7 +531,7 @@ func (cmd *PmCmdHandler) GetLockCmd(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Get lock success and rsp body is %s", body)
+    tlog.Debugf("Get lock success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 func (cmd *PmCmdHandler) RegUploadUrlCmd(w http.ResponseWriter, r *http.Request) {
@@ -592,7 +592,7 @@ func (cmd *PmCmdHandler) RegUploadUrlCmd(w http.ResponseWriter, r *http.Request)
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("PM Register upload url success and rsp body is %s", body)
+    tlog.Debugf("PM Register upload url success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 func (cmd *PmCmdHandler) SetStInfoCmd(w http.ResponseWriter, r *http.Request) {
@@ -679,7 +679,7 @@ func (cmd *PmCmdHandler) SetStInfoCmd(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusOK)
     w.Write(body)
 
-    tlog.Debugf("Pm status mag success and rsp body is %s", body)
+    tlog.Debugf("Pm status mag success and rsp body is %s and req url is %s", body, r.RequestURI)
 }
 
 
