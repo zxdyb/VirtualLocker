@@ -6,6 +6,7 @@ import (
     "container/list"
     "crypto/md5"
     "crypto/rand"
+    "crypto/tls"
     "encoding/hex"
     "encoding/json"
     "fmt"
@@ -1123,6 +1124,44 @@ func HttpGet(params map[string]string, urlStr string) (string, error) {
     url := fmt.Sprintf("%s?%s", urlStr, paramStr.String())
 
     c := http.Client{Timeout: time.Duration(cfgInfo.UploadTimeout) * time.Second}
+    resp, err := c.Get(url)
+
+    if resp != nil {
+        defer resp.Body.Close()
+    }
+
+    if err != nil {
+        tlog.Errorf("Pm upload failed %s", err.Error())
+        return "", err
+    }
+
+    body, _ := ioutil.ReadAll(resp.Body)
+
+    tlog.Debugf("Pm upload result is %s", string(body))
+    return string(body), nil
+}
+
+func HttpsGet(params map[string]string, urlStr string) (string, error) {
+    var keys []string
+    for k := range params {
+        keys = append(keys, k)
+    }
+
+    var paramStr bytes.Buffer
+    for _, k := range keys {
+        if paramStr.Len() > 0 {
+            paramStr.WriteString("&")
+        }
+        paramStr.WriteString(k + "=")
+        paramStr.WriteString(params[k])
+    }
+
+    url := fmt.Sprintf("%s?%s", urlStr, paramStr.String())
+
+    tr := &http.Transport{
+        TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+    }
+    c := http.Client{Timeout: time.Duration(cfgInfo.UploadTimeout) * time.Second, Transport: tr}
     resp, err := c.Get(url)
 
     if resp != nil {

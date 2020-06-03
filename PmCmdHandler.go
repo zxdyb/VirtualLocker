@@ -567,7 +567,7 @@ func (cmd *PmCmdHandler) RegUploadUrlCmd(w http.ResponseWriter, r *http.Request)
         return
     }
 
-    urladdress := "http://" + values["url"][0]
+    urladdress := "https://" + values["url"][0]
 
     cmd.lckImpl.SetUploadUrl(PM_LOCK_TYPE, urladdress)
     tlog.Debugf("Pm upload url is %s", urladdress)

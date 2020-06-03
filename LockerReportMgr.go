@@ -304,7 +304,7 @@ func (pml *PMLock) UpReport(URL string, flag string) error {
     params["status"] = st //pml.Status
     params["status_time"] = pml.StatusTime
 
-    ret, err := HttpGet(params, url)
+    ret, err := HttpsGet(params, url)
     if err != nil {
         tlog.Errorf("Pm upload failed %s", err.Error())
         return err
